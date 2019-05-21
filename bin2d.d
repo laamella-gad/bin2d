@@ -19,90 +19,83 @@
 */
 
 
-import std.file, std.ctype, std.stdio, std.stream,
-std.string, std.path;
+import std.file;
+import std.stdio;
+import std.path;
+import std.uni;
+import std.conv;
 
-
-int main(char[][] args)
-{
+int main(char[][] args) {
     char[] infn, outfn;
     bool createNew = false, preserveIdCase = false, nextNewLine = false, useVar = false,
     nextId = false;
-    char[] newline, argid;
+    char[] newline;
+    char[]  argid;
 
-    newline = std.path.linesep;
+    newline ~= lineSep;
 
-    foreach(char[] arg; args[1 .. args.length])
-    {
-        if(!arg.length)
-            continue;
+    foreach (char[] arg; args[1 .. args.length]) {
+        if (!arg.length)
+            continue ;
 
-        if(nextNewLine)
-        {
+        if (nextNewLine) {
             nextNewLine = false;
-            switch(arg)
-            {
-                case "lf": newline = "\n"; break;
-                case "cr": newline = "\r"; break;
-                case "crlf": newline = "\r\n"; break;
-                default: throw new Exception("Unknown line ending; expected lf, cr or crlf, not " ~ arg);
+            switch (arg) {
+                case "lf": newline = "\n".dup; break ;
+                case "cr": newline = "\r".dup; break ;
+                case "crlf": newline = "\r\n".dup; break ;
+                default: 
+                string msg = to!string("Unknown line ending; expected lf, cr or crlf, not " ~ arg);
+                throw new Exception(msg);
             }
-            continue;
+            continue ;
         }
 
-        if(nextId)
-        {
+        if (nextId) {
             nextId = false;
             argid = arg;
-            continue;
+            continue ;
         }
 
-        if('-' == arg[0] || '/' == arg[0])
-        {
-            switch(arg[1 .. arg.length])
-            {
-                case "n":
+        if ('-' == arg[0] || '/' == arg[0]) {
+            switch (arg[1 .. arg.length]) {
+                case"n":
                 createNew = true;
-                break;
-                case "p":
+                break ;
+                case"p":
                 preserveIdCase = true;
-                break;
-                case "l":
+                break ;
+                case"l":
                 nextNewLine = true;
-                break;
-                case "var":
+                break ;
+                case"var":
                 useVar = true;
-                break;
-                case "id":
+                break ;
+                case"id":
                 nextId = true;
-                break;
+                break ;
 
-                case "h", "?", "help":
-                break;
+                case"h", "?", "help":
+                break ;
 
                 default:
-                throw new Exception("Unrecognized switch " ~ arg);
+                throw new Exception(to!string("Unrecognized switch " ~ arg));
             }
         }
-        else
-        {
-            if(!infn.length)
-            {
+        else {
+            if (!infn.length){
                 infn = arg;
             }
-            else if(!outfn.length)
-            {
+            else if (!outfn.length){
                 outfn = arg;
             }
-            else
-            {
+            else {
                 throw new Exception("Too many arguments");
             }
         }
     }
 
-    if(!infn.length)
-    {
+    if (!infn.length){
         writef("Binary to D 1.0 written by Christopher E. Miller
 Usage:
    bintod [<switches>] <infile> [<outfile>]
@@ -123,77 +116,57 @@ Example:
     char[] safename;
     safename = new char[infn.length];
     iw = 0;
-    foreach(char ch; infn)
-    {
-        if(std.ctype.isalnum(ch) || '_' == ch)
+    foreach (char ch; infn){
+        if (isAlphaNum(ch) || '_' == ch)
             safename[iw++] = ch;
-        else if('.' == ch)
+        else if ('.' == ch)
             safename[iw++] = '_';
     }
     safename = safename[0 .. iw];
 
-    if(!outfn.length)
-    {
-        //outfn = std.string.replace(infn, ".", "_") ~ ".d";
+    if (!outfn.length){
         outfn = safename ~ ".d";
     }
 
-    if(argid.length)
-    {
+    if (argid.length){
         safename = argid; // Not necessarily safe; trust the user.
-    }
-    else if(!useVar)
-    {
-        if(!preserveIdCase)
-        {
-            safename = "BINARY_" ~ std.string.toupper(safename);
-        }
-        else
-        {
-            //safename = "BINARY_" ~ safename; // ?
+    }else if (!useVar){
+        if (!preserveIdCase){
+            safename = "BINARY_" ~ toUpper(safename);
+        }else {
             safename = "binary_" ~ safename; // ?
         }
-    }
-    else
-    {
+    }else {
         safename = "binary_" ~ safename;
     }
 
-    Stream sin, sout;
+    File sin, sout;
     int existed = false;
 
-    sin = new BufferedFile(infn);
-    if(createNew)
-    {
-        sout = new BufferedFile(outfn, FileMode.OutNew);
-    }
-    else
-    {
-        existed = std.file.exists(outfn);
-        sout = new BufferedFile(outfn, FileMode.Out);
+    sin = File(to!string(infn));
+    if (createNew){
+        sout = File(outfn, "w");
+    }else {
+        existed = exists(outfn);
+        sout = File(outfn, "a");
 
-        if(existed)
-        {
-            sout.seekEnd(0);
-            sout.writefln();
+        if (existed){
+            sout.writeln();
         }
     }
-    scope(exit)
-    sout.close();
 
     sout.writef("%subyte[%d] %s =%s[%s\t", useVar ? "" : "const ", sin.size(), safename, newline, newline);
 
-    ubyte ub;
-    for(iw = 0;; iw++)
-    {
-        if(1 != sin.readBlock(&ub, 1))
-            break;
-        if(16 == iw)
-        {
+    ubyte[1] ub;
+    for (iw = 0;; iw++){
+        ubyte[] r=sin.rawRead(ub);
+        if (1 != r.length)
+            break ;
+        if (16 == iw){
             iw = 0;
             sout.writef("%s\t", newline);
         }
-        sout.writef("0x%0.2X, ", ub);
+        sout.writef("0x%0.2X, ", r[0]);
     }
 
     sout.writef("%s];%s%s", newline, newline, newline);
@@ -202,4 +175,5 @@ Example:
 
     return 0;
 }
+
 
